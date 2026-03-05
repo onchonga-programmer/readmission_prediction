@@ -1,63 +1,64 @@
+import pandas as pd
+import psycopg2
+import os
+import time
 
--- patients_raw: raw ingestion table for the Diabetes 130-US Hospitals dataset
--- All columns stored as TEXT to preserve raw values exactly as they appear in the CSV.
--- Downstream cleaning / typing happens in later pipeline stages.
+# Wait for Postgres to be fully ready
+print("Waiting for Postgres...")
+time.sleep(10)
 
-CREATE TABLE IF NOT EXISTS patients_raw (
-    encounter_id                BIGINT,
-    patient_nbr                 BIGINT,
-    race                        TEXT,
-    gender                      TEXT,
-    age                         TEXT,
-    weight                      TEXT,
-    admission_type_id           INTEGER,
-    discharge_disposition_id    INTEGER,
-    admission_source_id         INTEGER,
-    time_in_hospital            INTEGER,
-    payer_code                  TEXT,
-    medical_specialty           TEXT,
-    num_lab_procedures          INTEGER,
-    num_procedures              INTEGER,
-    num_medications             INTEGER,
-    number_outpatient           INTEGER,
-    number_emergency            INTEGER,
-    number_inpatient            INTEGER,
-    diag_1                      TEXT,
-    diag_2                      TEXT,
-    diag_3                      TEXT,
-    number_diagnoses            INTEGER,
-    max_glu_serum               TEXT,
-    a1cresult                   TEXT,
-    metformin                   TEXT,
-    repaglinide                 TEXT,
-    nateglinide                 TEXT,
-    chlorpropamide              TEXT,
-    glimepiride                 TEXT,
-    acetohexamide               TEXT,
-    glipizide                   TEXT,
-    glyburide                   TEXT,
-    tolbutamide                 TEXT,
-    pioglitazone                TEXT,
-    rosiglitazone               TEXT,
-    acarbose                    TEXT,
-    miglitol                    TEXT,
-    troglitazone                TEXT,
-    tolazamide                  TEXT,
-    examide                     TEXT,
-    citoglipton                 TEXT,
-    insulin                     TEXT,
-    glyburide_metformin         TEXT,
-    glipizide_metformin         TEXT,
-    glimepiride_pioglitazone    TEXT,
-    metformin_rosiglitazone     TEXT,
-    metformin_pioglitazone      TEXT,
-    change_col                  TEXT,
-    diabetesmed                 TEXT,
-    readmitted                  TEXT,
-    ingested_at                 TIMESTAMP DEFAULT NOW()
-);
+# Read the CSV file
+print("Reading CSV...")
+df = pd.read_csv("/data/diabetic_data.csv")
+print(f"Loaded {len(df)} rows from CSV")
 
--- Index for the most common lookup patterns
-CREATE INDEX IF NOT EXISTS idx_patients_raw_patient_nbr    ON patients_raw (patient_nbr);
-CREATE INDEX IF NOT EXISTS idx_patients_raw_encounter_id   ON patients_raw (encounter_id);
-CREATE INDEX IF NOT EXISTS idx_patients_raw_readmitted     ON patients_raw (readmitted);
+# Connect to Postgres
+# NOTE: host is 'postgres' (the Docker service name), not localhost
+conn = psycopg2.connect(
+    host="postgres",
+    database=os.environ["POSTGRES_DB"],
+    user=os.environ["POSTGRES_USER"],
+    password=os.environ["POSTGRES_PASSWORD"],
+    port=5432
+)
+cur = conn.cursor()
+
+# Insert rows one by one
+print("Inserting rows... this will take a few minutes.")
+inserted = 0
+for _, row in df.iterrows():
+    cur.execute("""
+        INSERT INTO patients_raw (
+            encounter_id, patient_nbr, race, gender, age, weight,
+            admission_type_id, discharge_disposition_id, admission_source_id,
+            time_in_hospital, payer_code, medical_specialty,
+            num_lab_procedures, num_procedures, num_medications,
+            number_outpatient, number_emergency, number_inpatient,
+            diag_1, diag_2, diag_3, number_diagnoses,
+            max_glu_serum, a1cresult, metformin, repaglinide,
+            nateglinide, chlorpropamide, glimepiride, acetohexamide,
+            glipizide, glyburide, tolbutamide, pioglitazone,
+            rosiglitazone, acarbose, miglitol, troglitazone,
+            tolazamide, examide, citoglipton, insulin,
+            glyburide_metformin, glipizide_metformin,
+            glimepiride_pioglitazone, metformin_rosiglitazone,
+            metformin_pioglitazone, change_col, diabetesmed, readmitted
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT DO NOTHING
+    """, tuple(row))
+    inserted += 1
+    if inserted % 10000 == 0:
+        conn.commit()
+        print(f"  {inserted} rows inserted so far...")
+
+conn.commit()
+cur.close()
+conn.close()
+
+print(f"Done! {inserted} rows loaded into Postgres.")
