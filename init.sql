@@ -1,64 +1,74 @@
-import pandas as pd
-import psycopg2
-import os
-import time
+CREATE TABLE IF NOT EXISTS patients_raw (
+    encounter_id                INTEGER,
+    patient_nbr                 INTEGER,
+    race                        VARCHAR(50),
+    gender                      VARCHAR(20),
+    age                         VARCHAR(10),
+    weight                      VARCHAR(20),
+    admission_type_id           INTEGER,
+    discharge_disposition_id    INTEGER,
+    admission_source_id         INTEGER,
+    time_in_hospital            INTEGER,
+    payer_code                  VARCHAR(10),
+    medical_specialty           VARCHAR(100),
+    num_lab_procedures          INTEGER,
+    num_procedures              INTEGER,
+    num_medications             INTEGER,
+    number_outpatient           INTEGER,
+    number_emergency            INTEGER,
+    number_inpatient            INTEGER,
+    diag_1                      VARCHAR(20),
+    diag_2                      VARCHAR(20),
+    diag_3                      VARCHAR(20),
+    number_diagnoses            INTEGER,
+    max_glu_serum               VARCHAR(10),
+    a1cresult                   VARCHAR(10),
+    metformin                   VARCHAR(10),
+    repaglinide                 VARCHAR(10),
+    nateglinide                 VARCHAR(10),
+    chlorpropamide              VARCHAR(10),
+    glimepiride                 VARCHAR(10),
+    acetohexamide               VARCHAR(10),
+    glipizide                   VARCHAR(10),
+    glyburide                   VARCHAR(10),
+    tolbutamide                 VARCHAR(10),
+    pioglitazone                VARCHAR(10),
+    rosiglitazone               VARCHAR(10),
+    acarbose                    VARCHAR(10),
+    miglitol                    VARCHAR(10),
+    troglitazone                VARCHAR(10),
+    tolazamide                  VARCHAR(10),
+    examide                     VARCHAR(10),
+    citoglipton                 VARCHAR(10),
+    insulin                     VARCHAR(10),
+    glyburide_metformin         VARCHAR(10),
+    glipizide_metformin         VARCHAR(10),
+    glimepiride_pioglitazone    VARCHAR(10),
+    metformin_rosiglitazone     VARCHAR(10),
+    metformin_pioglitazone      VARCHAR(10),
+    change_col                  VARCHAR(10),
+    diabetesmed                 VARCHAR(10),
+    readmitted                  VARCHAR(5)
+);
 
-# Wait for Postgres to be fully ready
-print("Waiting for Postgres...")
-time.sleep(10)
-
-# Read the CSV file
-print("Reading CSV...")
-df = pd.read_csv("/data/diabetic_data.csv")
-print(f"Loaded {len(df)} rows from CSV")
-
-# Connect to Postgres
-# NOTE: host is 'postgres' (the Docker service name), not localhost
-conn = psycopg2.connect(
-    host="postgres",
-    database=os.environ["POSTGRES_DB"],
-    user=os.environ["POSTGRES_USER"],
-    password=os.environ["POSTGRES_PASSWORD"],
-    port=5432
-)
-cur = conn.cursor()
-
-# Insert rows one by one
-print("Inserting rows... this will take a few minutes.")
-inserted = 0
-for _, row in df.iterrows():
-    cur.execute("""
-        INSERT INTO patients_raw (
-            encounter_id, patient_nbr, race, gender, age, weight,
-            admission_type_id, discharge_disposition_id, admission_source_id,
-            time_in_hospital, payer_code, medical_specialty,
-            num_lab_procedures, num_procedures, num_medications,
-            number_outpatient, number_emergency, number_inpatient,
-            diag_1, diag_2, diag_3, number_diagnoses,
-            max_glu_serum, a1cresult, metformin, repaglinide,
-            nateglinide, chlorpropamide, glimepiride, acetohexamide,
-            glipizide, glyburide, tolbutamide, pioglitazone,
-            rosiglitazone, acarbose, miglitol, troglitazone,
-            tolazamide, examide, citoglipton, insulin,
-            glyburide_metformin, glipizide_metformin,
-            glimepiride_pioglitazone, metformin_rosiglitazone,
-            metformin_pioglitazone, change_col, diabetesmed, readmitted
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-        )
-        ON CONFLICT DO NOTHING
-    """, tuple(row))
-    inserted += 1
-    if inserted % 10000 == 0:
-        conn.commit()
-        print(f"  {inserted} rows inserted so far...")
-
-conn.commit()
-cur.close()
-conn.close()
-
-print(f"Done! {inserted} rows loaded into Postgres.")
+CREATE TABLE IF NOT EXISTS patient_features (
+    encounter_id         INTEGER,
+    time_in_hospital     INTEGER,
+    num_lab_procedures   INTEGER,
+    num_procedures       INTEGER,
+    num_medications      INTEGER,
+    number_outpatient    INTEGER,
+    number_emergency     INTEGER,
+    number_inpatient     INTEGER,
+    number_diagnoses     INTEGER,
+    age_numeric          INTEGER,
+    gender_numeric       INTEGER,
+    race_encoded         INTEGER,
+    insulin_encoded      INTEGER,
+    metformin_encoded    INTEGER,
+    change_encoded       INTEGER,
+    diabetes_med_encoded INTEGER,
+    total_meds_changed   INTEGER,
+    total_visits         INTEGER,
+    readmitted_30days    INTEGER
+);
