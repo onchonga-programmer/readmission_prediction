@@ -126,8 +126,8 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - MODEL_NAME=${MODEL_NAME}
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-      - AWS_ACCESS_KEY_ID=${MINIO_USER}
-      - AWS_SECRET_ACCESS_KEY=${MINIO_PASSWORD}
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
 
  
     depends_on:
@@ -147,8 +147,7 @@ services:
     
     restart: unless-stopped
 
-    networks:
-      - readmission_net
+    
 
 
 volumes:
