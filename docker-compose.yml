@@ -1,5 +1,3 @@
-
-
 services:
   postgres:
     image: postgres:15
@@ -29,6 +27,7 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+
   feature_engineering:
     build: ./services/feature_engineering
     depends_on:
@@ -37,16 +36,18 @@ services:
       ingestion:
         condition: service_completed_successfully
     environment:
+      POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     restart: "no"
+
   minio:
     image: minio/minio
     container_name: readmission_minio
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}        
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD} 
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ':9001'
     ports:
       - "9000:9000"
@@ -65,27 +66,17 @@ services:
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-        mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
-        mc mb local/${MINIO_BUCKET} --ignore-existing;
-        echo 'Bucket ready!';
-      "
+    entrypoint: ["/bin/sh", "-c", "mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} && mc mb local/${MINIO_BUCKET} --ignore-existing && echo 'Bucket ready!'"]
     restart: "no"
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.10.2
     container_name: readmission_mlflow
     environment:
-      MLFLOW_S3_ENDPOINT_URL: ${MINIO_ENDPOINT}         
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}              
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}      
-    command: >
-      bash -c "pip install psycopg2-binary boto3 --quiet &&
-               mlflow server
-                 --host 0.0.0.0
-                 --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-                 --default-artifact-root s3://${MINIO_BUCKET}/"
+      MLFLOW_S3_ENDPOINT_URL: ${MINIO_ENDPOINT}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    entrypoint: ["/bin/bash", "-c", "pip install psycopg2-binary boto3 -q && mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB} --default-artifact-root s3://${MINIO_BUCKET}/"]
     ports:
       - "5000:5000"
     depends_on:
@@ -94,10 +85,11 @@ services:
       minio-setup:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
       interval: 15s
       timeout: 10s
       retries: 10
+      start_period: 45s
 
   training:
     build: ./services/training
@@ -108,9 +100,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MLFLOW_TRACKING_URI: http://mlflow:5000
-      MLFLOW_S3_ENDPOINT_URL: ${MINIO_ENDPOINT}     
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}          
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}  
+      MLFLOW_S3_ENDPOINT_URL: ${MINIO_ENDPOINT}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       MODEL_NAME: ${MODEL_NAME}
     depends_on:
       mlflow:
@@ -118,7 +110,47 @@ services:
       feature_engineering:
         condition: service_completed_successfully
     restart: "no"
+
+
+  api:
+  
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+
+    ports:
+      - "8000:8000"
+
+ 
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MODEL_NAME=${MODEL_NAME}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=${MINIO_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_PASSWORD}
+
+ 
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      training:
+        condition: service_completed_successfully
+
+ 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s      # Run the test every 30 seconds
+      timeout: 10s       # Wait at most 10 seconds for a response
+      retries: 5         # Mark unhealthy after 5 consecutive failures
+      start_period: 60s  
+
+    
+    restart: unless-stopped
+
+    networks:
+      - readmission_net
+
+
 volumes:
   postgres_data:
   minio_data:
-    
