@@ -30,6 +30,9 @@ services:
 
   feature_engineering:
     build: ./services/feature_engineering
+    container_name: readmission_feature_engineering
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,6 +66,8 @@ services:
   minio-setup:
     image: minio/mc
     container_name: readmission_minio_setup
+    env_file:
+      - .env
     depends_on:
       minio:
         condition: service_healthy
