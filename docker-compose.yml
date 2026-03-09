@@ -75,13 +75,18 @@ services:
     restart: "no"
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.10.2
+    build: ./services/mlflow
     container_name: readmission_mlflow
     environment:
       MLFLOW_S3_ENDPOINT_URL: ${MINIO_ENDPOINT}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-    entrypoint: ["/bin/bash", "-c", "pip install psycopg2-binary boto3 -q && mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB} --default-artifact-root s3://${MINIO_BUCKET}/"]
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      --default-artifact-root s3://${MINIO_BUCKET}/
     ports:
       - "5000:5000"
     depends_on:
@@ -118,41 +123,38 @@ services:
 
 
   api:
-  
     build:
       context: ./services/api
       dockerfile: Dockerfile
-
     ports:
       - "8000:8000"
-
- 
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - MODEL_NAME=${MODEL_NAME}
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
-
- 
     depends_on:
       mlflow:
         condition: service_healthy
       training:
         condition: service_completed_successfully
-
- 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s      # Run the test every 30 seconds
       timeout: 10s       # Wait at most 10 seconds for a response
       retries: 5         # Mark unhealthy after 5 consecutive failures
       start_period: 60s  
-
-    
     restart: unless-stopped
 
-    
+  dashboard:
+    build: ./services/dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped 
 
 
 volumes:
