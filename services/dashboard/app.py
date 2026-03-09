@@ -1,7 +1,5 @@
 """
-Stage 7 - Streamlit Dashboard
-Connects to your FastAPI (Stage 5) and shows predictions visually.
-"""
+Streamlit dashboard for patient readmission risk prediction."""
 
 import streamlit as st
 import requests
@@ -9,36 +7,19 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# ─────────────────────────────────────────────
-# CONFIGURATION
-# The API URL uses the Docker service name "api" as the hostname.
-# Inside Docker's network, containers find each other by service name.
-# When running locally (outside Docker), you'd use localhost:8000 instead.
-# ─────────────────────────────────────────────
 API_URL = "http://api:8000"
 
-# ─────────────────────────────────────────────
-# PAGE SETUP
-# st.set_page_config must be the FIRST Streamlit call in your script.
-# It controls the browser tab title and page layout.
-# ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Patient Readmission Risk Predictor",
     page_icon="🏥",
-    layout="wide",   # "wide" uses the full browser width
+    layout="wide",
 )
 
 # ─────────────────────────────────────────────
 # HELPER FUNCTIONS
-# These are plain Python functions — nothing Streamlit-specific.
-# They call your FastAPI using the requests library.
 # ─────────────────────────────────────────────
 
 def check_api_health():
-    """
-    Calls GET /health on your FastAPI.
-    Returns True if the API is up, False if it's unreachable.
-    """
     try:
         response = requests.get(f"{API_URL}/health", timeout=3)
         return response.status_code == 200
@@ -46,10 +27,6 @@ def check_api_health():
         return False
 
 def get_model_info():
-    """
-    Calls GET /model-info to get the current model version and metrics.
-    Returns a dict, or None if the call fails.
-    """
     try:
         response = requests.get(f"{API_URL}/model-info", timeout=5)
         if response.status_code == 200:
@@ -59,15 +36,10 @@ def get_model_info():
     return None
 
 def predict_single(patient_data: dict):
-    """
-    Calls POST /predict with a single patient record.
-    patient_data is a Python dict matching your Pydantic schema from schema.py.
-    Returns the API response as a dict, or None on failure.
-    """
     try:
         response = requests.post(
             f"{API_URL}/predict",
-            json=patient_data,   # requests automatically sets Content-Type: application/json
+            json=patient_data,
             timeout=10,
         )
         if response.status_code == 200:
@@ -79,15 +51,7 @@ def predict_single(patient_data: dict):
     return None
 
 def predict_batch(df: pd.DataFrame):
-    """
-    Sends each row of a DataFrame to the API one at a time.
-    Returns a list of prediction results.
-    
-    A real production system would use a POST /predict/batch endpoint,
-    but this approach keeps things simple and easy to understand.
-    """
     results = []
-    # st.progress shows a progress bar in the UI — Streamlit updates it in real time
     progress_bar = st.progress(0)
     for i, (_, row) in enumerate(df.iterrows()):
         result = predict_single(row.to_dict())
@@ -95,29 +59,19 @@ def predict_batch(df: pd.DataFrame):
         progress_bar.progress((i + 1) / len(df))
     return results
 
-# ─────────────────────────────────────────────
-# RISK DISPLAY HELPER
-# Converts a 0–1 probability into a colour-coded visual.
-# ─────────────────────────────────────────────
-
 def display_risk_gauge(probability: float):
-    """
-    Draws a speedometer-style gauge using Plotly.
-    This is a great example of using Plotly inside Streamlit — 
-    you build a Plotly figure, then pass it to st.plotly_chart().
-    """
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
-        value=probability * 100,           # convert 0–1 to 0–100 for display
+        value=probability * 100,
         domain={"x": [0, 1], "y": [0, 1]},
         title={"text": "Readmission Risk %", "font": {"size": 20}},
         gauge={
             "axis": {"range": [0, 100]},
             "bar": {"color": "darkblue"},
             "steps": [
-                {"range": [0, 30], "color": "#2ecc71"},   # green = low risk
-                {"range": [30, 60], "color": "#f39c12"},  # orange = medium risk
-                {"range": [60, 100], "color": "#e74c3c"}, # red = high risk
+                {"range": [0, 30],  "color": "#2ecc71"},
+                {"range": [30, 60], "color": "#f39c12"},
+                {"range": [60, 100],"color": "#e74c3c"},
             ],
             "threshold": {
                 "line": {"color": "red", "width": 4},
@@ -131,8 +85,6 @@ def display_risk_gauge(probability: float):
 
 # ─────────────────────────────────────────────
 # SIDEBAR
-# st.sidebar.* puts widgets in the left panel.
-# This is where users navigate between pages.
 # ─────────────────────────────────────────────
 
 st.sidebar.title("🏥 Navigation")
@@ -141,7 +93,6 @@ page = st.sidebar.radio(
     ["🔍 Single Prediction", "📊 Batch Prediction", "📈 Model Performance"],
 )
 
-# API health check shown in the sidebar so it's always visible
 st.sidebar.divider()
 st.sidebar.subheader("API Status")
 if check_api_health():
@@ -151,77 +102,106 @@ else:
 
 # ─────────────────────────────────────────────
 # PAGE 1: SINGLE PATIENT PREDICTION
-# Users fill in a form and get a prediction for one patient.
+# All 17 fields from PatientFeatures in models.py
 # ─────────────────────────────────────────────
 
 if page == "🔍 Single Prediction":
     st.title("🔍 Single Patient Readmission Prediction")
     st.write("Fill in the patient details below and click **Predict** to get a readmission risk score.")
 
-    # st.form groups inputs together so the API call only happens when
-    # the user clicks Submit — not on every keystroke.
     with st.form("patient_form"):
-        st.subheader("Patient Details")
 
-        # st.columns splits the page into side-by-side columns
+        st.subheader("🏥 Hospital Stay")
         col1, col2, col3 = st.columns(3)
-
         with col1:
-            time_in_hospital = st.number_input(
-                "Days in Hospital", min_value=1, max_value=30, value=5,
-                help="Number of days the patient stayed in hospital"
-            )
-            num_medications = st.number_input(
-                "Number of Medications", min_value=1, max_value=81, value=12
-            )
-            number_inpatient = st.number_input(
-                "Prior Inpatient Visits", min_value=0, max_value=21, value=1
-            )
-
+            time_in_hospital = st.number_input("Days in Hospital", min_value=1, max_value=30, value=5)
         with col2:
-            age_numeric = st.number_input(
-                "Age", min_value=0, max_value=100, value=55
-            )
-            num_lab_procedures = st.number_input(
-                "Lab Procedures", min_value=0, max_value=132, value=44
-            )
-            number_outpatient = st.number_input(
-                "Prior Outpatient Visits", min_value=0, max_value=42, value=0
-            )
-
+            num_lab_procedures = st.number_input("Lab Procedures", min_value=0, max_value=132, value=44)
         with col3:
+            num_procedures = st.number_input("Procedures During Stay", min_value=0, max_value=6, value=1)
+
+        st.subheader("💊 Medications")
+        col4, col5 = st.columns(2)
+        with col4:
+            num_medications = st.number_input("Number of Medications", min_value=1, max_value=81, value=12)
+            metformin_encoded = st.selectbox(
+                "Metformin",
+                options=[0, 1, 2, 3],
+                format_func=lambda x: ["No", "Steady", "Up", "Down"][x]
+            )
+            change_encoded = st.selectbox(
+                "Medication Change Made?",
+                options=[0, 1],
+                format_func=lambda x: ["No", "Yes"][x]
+            )
+        with col5:
             insulin_encoded = st.selectbox(
-                "Insulin", options=[0, 1, 2, 3],
-                format_func=lambda x: ["No", "Steady", "Up", "Down"][x],
-                help="0=No insulin, 1=Steady dose, 2=Increased, 3=Decreased"
+                "Insulin",
+                options=[0, 1, 2, 3],
+                format_func=lambda x: ["No", "Steady", "Up", "Down"][x]
             )
-            num_procedures = st.number_input(
-                "Procedures During Stay", min_value=0, max_value=6, value=1
+            diabetes_med_encoded = st.selectbox(
+                "Diabetes Medication Prescribed?",
+                options=[0, 1],
+                format_func=lambda x: ["No", "Yes"][x]
             )
-            number_diagnoses = st.number_input(
-                "Number of Diagnoses", min_value=1, max_value=16, value=8
+            total_meds_changed = st.number_input("Total Medications Changed", min_value=0, max_value=10, value=1)
+
+        st.subheader("📋 Visit History")
+        col6, col7, col8 = st.columns(3)
+        with col6:
+            number_outpatient = st.number_input("Prior Outpatient Visits", min_value=0, max_value=42, value=0)
+        with col7:
+            number_emergency = st.number_input("Prior Emergency Visits", min_value=0, max_value=76, value=0)
+        with col8:
+            number_inpatient = st.number_input("Prior Inpatient Visits", min_value=0, max_value=21, value=1)
+
+        total_visits = number_outpatient + number_emergency + number_inpatient
+        st.info(f"Total prior visits (auto-calculated): **{total_visits}**")
+
+        st.subheader("🧍 Patient Demographics")
+        col9, col10, col11, col12 = st.columns(4)
+        with col9:
+            number_diagnoses = st.number_input("Number of Diagnoses", min_value=1, max_value=16, value=8)
+        with col10:
+            age_numeric = st.number_input("Age", min_value=0, max_value=100, value=55)
+        with col11:
+            gender_numeric = st.selectbox(
+                "Gender",
+                options=[0, 1],
+                format_func=lambda x: ["Female", "Male"][x]
+            )
+        with col12:
+            race_encoded = st.selectbox(
+                "Race",
+                options=[0, 1, 2, 3, 4],
+                format_func=lambda x: ["Caucasian", "AfricanAmerican", "Hispanic", "Asian", "Other"][x]
             )
 
-        # st.form_submit_button only works inside st.form
-        # It returns True when the user clicks it
         submitted = st.form_submit_button("🔮 Predict Readmission Risk", use_container_width=True)
 
-    # This block runs only when the form is submitted
     if submitted:
-        # Build the dict that matches your FastAPI Pydantic schema
+        # All 17 fields — must match PatientFeatures in models.py exactly
         patient_data = {
-            "time_in_hospital": time_in_hospital,
-            "num_medications": num_medications,
-            "number_inpatient": number_inpatient,
-            "age_numeric": age_numeric,
-            "num_lab_procedures": num_lab_procedures,
-            "number_outpatient": number_outpatient,
-            "insulin_encoded": insulin_encoded,
-            "num_procedures": num_procedures,
-            "number_diagnoses": number_diagnoses,
+            "time_in_hospital":     float(time_in_hospital),
+            "num_lab_procedures":   float(num_lab_procedures),
+            "num_procedures":       float(num_procedures),
+            "num_medications":      float(num_medications),
+            "number_outpatient":    float(number_outpatient),
+            "number_emergency":     float(number_emergency),
+            "number_inpatient":     float(number_inpatient),
+            "number_diagnoses":     float(number_diagnoses),
+            "age_numeric":          float(age_numeric),
+            "gender_numeric":       float(gender_numeric),
+            "race_encoded":         float(race_encoded),
+            "insulin_encoded":      float(insulin_encoded),
+            "metformin_encoded":    float(metformin_encoded),
+            "change_encoded":       float(change_encoded),
+            "diabetes_med_encoded": float(diabetes_med_encoded),
+            "total_meds_changed":   float(total_meds_changed),
+            "total_visits":         float(total_visits),
         }
 
-        # st.spinner shows a loading animation while the API call runs
         with st.spinner("Getting prediction from model..."):
             result = predict_single(patient_data)
 
@@ -229,25 +209,21 @@ if page == "🔍 Single Prediction":
             st.divider()
             st.subheader("Prediction Result")
 
-            prob = result.get("readmission_probability", 0)
-            risk_level = result.get("risk_level", "Unknown")
+            prob          = result.get("readmission_probability", 0)
+            risk_level    = result.get("risk_level", "Unknown")
             model_version = result.get("model_version", "?")
 
-            # Show the gauge chart
             display_risk_gauge(prob)
 
-            # Show risk level with colour coding using st.metric
             col_a, col_b, col_c = st.columns(3)
             with col_a:
                 st.metric("Readmission Probability", f"{prob:.1%}")
             with col_b:
-                # Colour the risk level text based on severity
                 colour = {"Low": "green", "Medium": "orange", "High": "red"}.get(risk_level, "gray")
                 st.markdown(f"**Risk Level:** :{colour}[{risk_level}]")
             with col_c:
                 st.metric("Model Version", f"v{model_version}")
 
-            # Show a clinical interpretation message
             if risk_level == "High":
                 st.error("⚠️ **High Risk**: This patient has a high probability of readmission within 30 days. Consider a follow-up care plan.")
             elif risk_level == "Medium":
@@ -257,27 +233,24 @@ if page == "🔍 Single Prediction":
 
 # ─────────────────────────────────────────────
 # PAGE 2: BATCH PREDICTION
-# Users upload a CSV and get predictions for every row.
 # ─────────────────────────────────────────────
 
 elif page == "📊 Batch Prediction":
     st.title("📊 Batch Patient Prediction")
     st.write("Upload a CSV file with patient records to get predictions for all of them at once.")
+    st.info("Your CSV must have these 17 columns: time_in_hospital, num_lab_procedures, num_procedures, num_medications, number_outpatient, number_emergency, number_inpatient, number_diagnoses, age_numeric, gender_numeric, race_encoded, insulin_encoded, metformin_encoded, change_encoded, diabetes_med_encoded, total_meds_changed, total_visits")
 
-    # st.file_uploader lets users drag-and-drop or browse for a file
     uploaded_file = st.file_uploader("Upload patient CSV", type=["csv"])
 
     if uploaded_file is not None:
-        # pandas reads the uploaded file directly — st.file_uploader returns a file-like object
         df = pd.read_csv(uploaded_file)
         st.write(f"📋 Loaded **{len(df)} patients** from file.")
-        st.dataframe(df.head())  # Show first 5 rows as a preview
+        st.dataframe(df.head())
 
         if st.button("🚀 Run Batch Predictions"):
             with st.spinner(f"Running predictions for {len(df)} patients..."):
                 results = predict_batch(df)
 
-            # Add predictions as a new column on the original DataFrame
             df["readmission_probability"] = [
                 r.get("readmission_probability", None) if r else None for r in results
             ]
@@ -288,23 +261,18 @@ elif page == "📊 Batch Prediction":
             st.success("✅ Predictions complete!")
             st.dataframe(df)
 
-            # Risk distribution chart — how many High / Medium / Low patients?
             if "risk_level" in df.columns:
                 st.subheader("Risk Level Distribution")
                 risk_counts = df["risk_level"].value_counts().reset_index()
                 risk_counts.columns = ["Risk Level", "Count"]
                 colour_map = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
                 fig = px.bar(
-                    risk_counts,
-                    x="Risk Level",
-                    y="Count",
-                    color="Risk Level",
-                    color_discrete_map=colour_map,
+                    risk_counts, x="Risk Level", y="Count",
+                    color="Risk Level", color_discrete_map=colour_map,
                     title="Patient Risk Distribution",
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-            # st.download_button lets users save the results as a CSV
             csv_output = df.to_csv(index=False)
             st.download_button(
                 label="⬇️ Download Results as CSV",
@@ -315,7 +283,6 @@ elif page == "📊 Batch Prediction":
 
 # ─────────────────────────────────────────────
 # PAGE 3: MODEL PERFORMANCE
-# Fetches model metrics from your FastAPI and displays them.
 # ─────────────────────────────────────────────
 
 elif page == "📈 Model Performance":
@@ -330,7 +297,6 @@ elif page == "📈 Model Performance":
         metrics = info.get("metrics", {})
 
         if metrics:
-            # Display key metrics as a row of metric boxes
             cols = st.columns(len(metrics))
             for col, (metric_name, metric_value) in zip(cols, metrics.items()):
                 with col:
@@ -339,18 +305,12 @@ elif page == "📈 Model Performance":
                         value=f"{metric_value:.3f}" if isinstance(metric_value, float) else metric_value,
                     )
 
-            # AUC bar chart — compare metric values visually
             st.subheader("Metrics Overview")
-            metric_df = pd.DataFrame(
-                list(metrics.items()), columns=["Metric", "Value"]
-            )
+            metric_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
             fig = px.bar(
-                metric_df,
-                x="Metric",
-                y="Value",
+                metric_df, x="Metric", y="Value",
                 title="Model Evaluation Metrics",
-                color="Value",
-                color_continuous_scale="blues",
+                color="Value", color_continuous_scale="blues",
                 range_y=[0, 1],
             )
             st.plotly_chart(fig, use_container_width=True)
