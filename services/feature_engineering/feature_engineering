@@ -4,14 +4,13 @@ from sqlalchemy import create_engine
 import os
 import time
 
-# Give Postgres a moment to be ready before we connect
 time.sleep(5)
 
 # Read DB credentials from environment variables (set in .env)
 DB_USER = os.environ["POSTGRES_USER"]
 DB_PASS = os.environ["POSTGRES_PASSWORD"]
 DB_NAME = os.environ["POSTGRES_DB"]
-DB_HOST = "postgres"  # This is the Docker service name, not localhost!
+DB_HOST = "postgres"  
 
 engine = create_engine(f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}")
 print("✅ Connected to Postgres")
@@ -91,7 +90,6 @@ feature_columns = [
     "readmitted_30days"
 ]
 
-# Re-add encounter_id before selecting (we dropped it earlier, add back as identifier)
 df["encounter_id"] = pd.read_sql(
     "SELECT encounter_id FROM patients_raw", engine
 ).values[:len(df)]
