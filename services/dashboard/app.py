@@ -17,7 +17,7 @@ st.set_page_config(
 
 # ─────────────────────────────────────────────
 # HELPER FUNCTIONS
-# ─────────────────────────────────────────────
+
 
 def check_api_health():
     try:
@@ -100,10 +100,7 @@ if check_api_health():
 else:
     st.sidebar.error("❌ API is offline")
 
-# ─────────────────────────────────────────────
-# PAGE 1: SINGLE PATIENT PREDICTION
-# All 17 fields from PatientFeatures in models.py
-# ─────────────────────────────────────────────
+
 
 if page == "🔍 Single Prediction":
     st.title("🔍 Single Patient Readmission Prediction")
@@ -231,9 +228,6 @@ if page == "🔍 Single Prediction":
             else:
                 st.success("✅ **Low Risk**: This patient is unlikely to be readmitted within 30 days.")
 
-# ─────────────────────────────────────────────
-# PAGE 2: BATCH PREDICTION
-# ─────────────────────────────────────────────
 
 elif page == "📊 Batch Prediction":
     st.title("📊 Batch Patient Prediction")
